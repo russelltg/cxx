@@ -3,7 +3,7 @@ use crate::gen::nested::NamespaceEntries;
 use crate::gen::out::OutFile;
 use crate::gen::{builtin, include, Opt};
 use crate::syntax::atom::Atom::{self, *};
-use crate::syntax::instantiate::{ImplKey, NamedImplKey};
+use crate::syntax::instantiate::{FunctionImplKey, ImplKey, NamedImplKey};
 use crate::syntax::map::UnorderedMap as Map;
 use crate::syntax::set::UnorderedSet;
 use crate::syntax::symbol::{self, Symbol};
@@ -218,6 +218,7 @@ fn pick_includes_and_builtins(out: &mut OutFile, apis: &[Api]) {
             Type::SharedPtr(_) | Type::WeakPtr(_) => out.include.memory = true,
             Type::Str(_) => out.builtin.rust_str = true,
             Type::CxxVector(_) => out.include.vector = true,
+            Type::CxxFunction(_) => out.include.functional = true,
             Type::Fn(_) => out.builtin.rust_fn = true,
             Type::SliceRef(_) => out.builtin.rust_slice = true,
             Type::Array(_) => out.include.array = true,
@@ -1255,6 +1256,25 @@ fn write_type(out: &mut OutFile, ty: &Type) {
             write_type(out, &ty.inner);
             write!(out, ">");
         }
+        Type::CxxFunction(ty) => {
+            if let Type::Fn(f) = &ty.inner {
+                write!(out, "::std::function<");
+                match &f.ret {
+                    Some(ret) => write_type(out, ret),
+                    None => write!(out, "void"),
+                }
+                write!(out, "(");
+                for (i, arg) in f.args.iter().enumerate() {
+                    if i > 0 {
+                        write!(out, ", ");
+                    }
+                    write_type(out, &arg.ty);
+                }
+                write!(out, ")>");
+            } else {
+                unreachable!("should not have produced a CxxFunction with non-Fn inner")
+            }
+        }
         Type::Ref(r) => {
             write_type_space(out, &r.inner);
             if !r.mutable {
@@ -1339,6 +1359,7 @@ fn write_space_after_type(out: &mut OutFile, ty: &Type) {
         | Type::WeakPtr(_)
         | Type::Str(_)
         | Type::CxxVector(_)
+        | Type::CxxFunction(_)
         | Type::RustVec(_)
         | Type::SliceRef(_)
         | Type::Fn(_)
@@ -1413,6 +1434,7 @@ fn write_generic_instantiations(out: &mut OutFile) {
             ImplKey::SharedPtr(ident) => write_shared_ptr(out, ident),
             ImplKey::WeakPtr(ident) => write_weak_ptr(out, ident),
             ImplKey::CxxVector(ident) => write_cxx_vector(out, ident),
+            ImplKey::CxxFunction(ref key) => write_cxx_function(out, key),
         }
     }
     out.end_block(Block::ExternC);
@@ -1955,4 +1977,37 @@ fn write_cxx_vector(out: &mut OutFile, key: NamedImplKey) {
 
     out.include.memory = true;
     write_unique_ptr_common(out, UniquePtr::CxxVector(element));
+}
+
+fn write_cxx_function(out: &mut OutFile, key: &FunctionImplKey) {
+    begin_function_definition(out);
+    let link_invoke = key.link_name_invoke(out.types);
+
+    if let Type::CxxFunction(ty) = key.ty {
+        if let Type::Fn(sig) = &ty.inner {
+            if let Some(ret) = &sig.ret {
+                write_type(out, &ret);
+            } else {
+                write!(out, "void")
+            }
+            write!(out, " {link_invoke}(");
+            write_type(out, &key.ty);
+            write!(out, " f");
+            for (id, a) in sig.args.iter().enumerate() {
+                write!(out, ", ");
+                write_type(out, &a.ty);
+                write!(out, " a_{id}");
+            }
+            writeln!(out, ") {{");
+            write!(out, "  return f(");
+            for id in 0..sig.args.len() {
+                write!(out, "a_{id}");
+                if id != sig.args.len() - 1 {
+                    write!(out, ", ");
+                }
+            }
+            writeln!(out, ");");
+            writeln!(out, "}}");
+        }
+    }
 }

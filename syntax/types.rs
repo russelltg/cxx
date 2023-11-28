@@ -175,7 +175,7 @@ impl<'a> Types<'a> {
                 Some(impl_key) => impl_key,
                 None => continue,
             };
-            let implicit_impl = match impl_key {
+            let implicit_impl = match &impl_key {
                 ImplKey::RustBox(ident)
                 | ImplKey::RustVec(ident)
                 | ImplKey::UniquePtr(ident)
@@ -183,6 +183,9 @@ impl<'a> Types<'a> {
                 | ImplKey::WeakPtr(ident)
                 | ImplKey::CxxVector(ident) => {
                     Atom::from(ident.rust).is_none() && !aliases.contains_key(ident.rust)
+                }
+                ImplKey::CxxFunction(_) => {
+                    true // always need an impl
                 }
             };
             if implicit_impl && !impls.contains_key(&impl_key) {

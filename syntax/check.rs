@@ -51,6 +51,7 @@ fn do_typecheck(cx: &mut Check) {
             Type::SharedPtr(ptr) => check_type_shared_ptr(cx, ptr),
             Type::WeakPtr(ptr) => check_type_weak_ptr(cx, ptr),
             Type::CxxVector(ptr) => check_type_cxx_vector(cx, ptr),
+            Type::CxxFunction(ptr) => check_type_cxx_function(cx, ptr),
             Type::Ref(ty) => check_type_ref(cx, ty),
             Type::Ptr(ty) => check_type_ptr(cx, ty),
             Type::Array(array) => check_type_array(cx, array),
@@ -223,6 +224,31 @@ fn check_type_cxx_vector(cx: &mut Check, ptr: &Ty1) {
     }
 
     cx.error(ptr, "unsupported vector element type");
+}
+
+fn check_type_cxx_function(cx: &mut Check, ptr: &Ty1) {
+    if let Type::Fn(ptr) = &ptr.inner {
+        if ptr.asyncness.is_some() {
+            cx.error(ptr, "CxxFunction signature must not be async");
+        }
+        if ptr.unsafety.is_some() {
+            cx.error(
+                ptr,
+                "unimplemented: CxxFunction signature must not be unsafe",
+            );
+        }
+        if ptr.generics.lt_token.is_some() {
+            cx.error(ptr, "CxxFunction signature must not be generic");
+        }
+        if ptr.receiver.is_some() {
+            cx.error(ptr, "CxxFunction signature must not have a receiver");
+        }
+        if ptr.throws {
+            cx.error(ptr, "CxxFunction signature must not throw");
+        }
+        return;
+    }
+    cx.error(ptr, "CxxFunction must have fn(a, b) -> c generic");
 }
 
 fn check_type_ref(cx: &mut Check, ty: &Ref) {
@@ -526,7 +552,9 @@ fn check_api_impl(cx: &mut Check, imp: &Impl) {
         | Type::UniquePtr(ty)
         | Type::SharedPtr(ty)
         | Type::WeakPtr(ty)
-        | Type::CxxVector(ty) => {
+        | Type::CxxVector(ty)
+        | Type::CxxFunction(ty)  // ?????
+        => {
             if let Type::Ident(inner) = &ty.inner {
                 if Atom::from(&inner.rust).is_none() {
                     return;
@@ -609,6 +637,7 @@ fn check_reserved_name(cx: &mut Check, ident: &Ident) {
         || ident == "WeakPtr"
         || ident == "Vec"
         || ident == "CxxVector"
+        || ident == "CxxFunction"
         || ident == "str"
         || Atom::from(ident).is_some()
     {
@@ -648,7 +677,7 @@ fn is_unsized(cx: &mut Check, ty: &Type) -> bool {
             ident == CxxString || is_opaque_cxx(cx, ident) || cx.types.rust.contains(ident)
         }
         Type::Array(array) => is_unsized(cx, &array.inner),
-        Type::CxxVector(_) | Type::Fn(_) | Type::Void(_) => true,
+        Type::CxxVector(_) | Type::CxxFunction(_) | Type::Fn(_) | Type::Void(_) => true,
         Type::RustBox(_)
         | Type::RustVec(_)
         | Type::UniquePtr(_)
@@ -732,6 +761,7 @@ fn describe(cx: &mut Check, ty: &Type) -> String {
         Type::Ptr(_) => "raw pointer".to_owned(),
         Type::Str(_) => "&str".to_owned(),
         Type::CxxVector(_) => "C++ vector".to_owned(),
+        Type::CxxFunction(_) => "C++ function".to_owned(),
         Type::SliceRef(_) => "slice".to_owned(),
         Type::Fn(_) => "function pointer".to_owned(),
         Type::Void(_) => "()".to_owned(),

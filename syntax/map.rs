@@ -38,17 +38,17 @@ mod ordered {
 
     impl<K, V> OrderedMap<K, V>
     where
-        K: Copy + Hash + Eq,
+        K: Hash + Eq + Clone,
     {
         pub(crate) fn insert(&mut self, key: K, value: V) -> Option<V> {
-            match self.map.entry(key) {
+            match self.map.entry(key.clone()) {
                 Entry::Occupied(entry) => {
                     let i = &mut self.vec[*entry.get()];
                     Some(mem::replace(&mut i.1, value))
                 }
                 Entry::Vacant(entry) => {
                     entry.insert(self.vec.len());
-                    self.vec.push((key, value));
+                    self.vec.push((key.clone(), value));
                     None
                 }
             }

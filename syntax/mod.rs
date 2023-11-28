@@ -270,6 +270,7 @@ pub(crate) enum Type {
     Ptr(Box<Ptr>),
     Str(Box<Ref>),
     CxxVector(Box<Ty1>),
+    CxxFunction(Box<Ty1>),
     Fn(Box<Signature>),
     Void(Span),
     SliceRef(Box<SliceRef>),

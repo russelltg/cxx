@@ -300,6 +300,8 @@ pub mod ffi {
         fn r_take_ref_rust_vec(v: &Vec<u8>);
         fn r_take_ref_rust_vec_string(v: &Vec<String>);
         fn r_take_enum(e: Enum);
+        fn r_call_ref_function(v: &mut CxxFunction<fn()>);
+        fn r_call_ref_function_arg_ret(v: &mut CxxFunction<fn(num: i32) -> i32>) -> i32;
 
         fn r_try_return_void() -> Result<()>;
         fn r_try_return_primitive() -> Result<usize>;
@@ -620,6 +622,14 @@ fn r_take_ref_rust_vec_string(v: &Vec<String>) {
 
 fn r_take_enum(e: ffi::Enum) {
     let _ = e;
+}
+
+fn r_call_ref_function(f: &mut ffi::CxxFunction<fn()>) {
+    f.invoke();
+}
+
+fn r_call_ref_function_arg_ret(f: &mut ffi::CxxFunction<fn(num: i32) -> i32>) -> i32 {
+    f.invoke(32)
 }
 
 fn r_try_return_void() -> Result<(), Error> {

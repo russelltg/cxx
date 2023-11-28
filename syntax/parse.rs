@@ -1066,7 +1066,7 @@ fn parse_impl(cx: &mut Errors, imp: ItemImpl) -> Result<Api> {
         | Type::UniquePtr(ty)
         | Type::SharedPtr(ty)
         | Type::WeakPtr(ty)
-        | Type::CxxVector(ty) => match &ty.inner {
+        | Type::CxxVector(ty)  => match &ty.inner {
             Type::Ident(ident) => ident.generics.clone(),
             _ => Lifetimes::default(),
         },
@@ -1074,10 +1074,11 @@ fn parse_impl(cx: &mut Errors, imp: ItemImpl) -> Result<Api> {
         | Type::Ref(_)
         | Type::Ptr(_)
         | Type::Str(_)
-        | Type::Fn(_)
+        | Type::Fn(_) // | Type::CxxFunction(_) // TODO: CxxFunction probably needs lifetime
         | Type::Void(_)
         | Type::SliceRef(_)
         | Type::Array(_) => Lifetimes::default(),
+        Type::CxxFunction(_) => panic!()
     };
 
     let negative = negative_token.is_some();
@@ -1261,6 +1262,15 @@ fn parse_type_path(ty: &TypePath) -> Result<Type> {
                             rangle: generic.gt_token,
                         })));
                     }
+                } else if ident == "CxxFunction" && generic.args.len() == 1 {
+                    if let GenericArgument::Type(syn::Type::BareFn(f)) = &generic.args[0] {
+                        return Ok(Type::CxxFunction(Box::new(Ty1 {
+                            name: ident,
+                            langle: generic.lt_token,
+                            inner: Type::Fn(parse_signature(f)?),
+                            rangle: generic.gt_token,
+                        })));
+                    }
                 } else if ident == "Box" && generic.args.len() == 1 {
                     if let GenericArgument::Type(arg) = &generic.args[0] {
                         let inner = parse_type(arg)?;
@@ -1361,7 +1371,7 @@ fn parse_type_array(ty: &TypeArray) -> Result<Type> {
     })))
 }
 
-fn parse_type_fn(ty: &TypeBareFn) -> Result<Type> {
+fn parse_signature(ty: &TypeBareFn) -> Result<Box<Signature>> {
     if ty.lifetimes.is_some() {
         return Err(Error::new_spanned(
             ty,
@@ -1419,7 +1429,7 @@ fn parse_type_fn(ty: &TypeBareFn) -> Result<Type> {
     let receiver = None;
     let paren_token = ty.paren_token;
 
-    Ok(Type::Fn(Box::new(Signature {
+    Ok(Box::new(Signature {
         asyncness,
         unsafety,
         fn_token,
@@ -1430,7 +1440,11 @@ fn parse_type_fn(ty: &TypeBareFn) -> Result<Type> {
         throws,
         paren_token,
         throws_tokens,
-    })))
+    }))
+}
+
+fn parse_type_fn(ty: &TypeBareFn) -> Result<Type> {
+    Ok(Type::Fn(parse_signature(ty)?))
 }
 
 fn parse_return_type(

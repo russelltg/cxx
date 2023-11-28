@@ -2,7 +2,7 @@ use crate::syntax::atom::Atom::*;
 use crate::syntax::attrs::{self, OtherAttrs};
 use crate::syntax::cfg::CfgExpr;
 use crate::syntax::file::Module;
-use crate::syntax::instantiate::{ImplKey, NamedImplKey};
+use crate::syntax::instantiate::{FunctionImplKey, ImplKey, NamedImplKey};
 use crate::syntax::qualified::QualifiedName;
 use crate::syntax::report::Errors;
 use crate::syntax::symbol::Symbol;
@@ -91,25 +91,35 @@ fn expand(ffi: Module, doc: Doc, attrs: OtherAttrs, apis: &[Api], types: &Types)
         }
     }
 
+    let mut first_cxx_function = true;
     for (impl_key, &explicit_impl) in &types.impls {
-        match *impl_key {
+        match impl_key {
             ImplKey::RustBox(ident) => {
-                hidden.extend(expand_rust_box(ident, types, explicit_impl));
+                hidden.extend(expand_rust_box(*ident, types, explicit_impl));
             }
             ImplKey::RustVec(ident) => {
-                hidden.extend(expand_rust_vec(ident, types, explicit_impl));
+                hidden.extend(expand_rust_vec(*ident, types, explicit_impl));
             }
             ImplKey::UniquePtr(ident) => {
-                expanded.extend(expand_unique_ptr(ident, types, explicit_impl));
+                expanded.extend(expand_unique_ptr(*ident, types, explicit_impl));
             }
             ImplKey::SharedPtr(ident) => {
-                expanded.extend(expand_shared_ptr(ident, types, explicit_impl));
+                expanded.extend(expand_shared_ptr(*ident, types, explicit_impl));
             }
             ImplKey::WeakPtr(ident) => {
-                expanded.extend(expand_weak_ptr(ident, types, explicit_impl));
+                expanded.extend(expand_weak_ptr(*ident, types, explicit_impl));
             }
             ImplKey::CxxVector(ident) => {
-                expanded.extend(expand_cxx_vector(ident, explicit_impl, types));
+                expanded.extend(expand_cxx_vector(*ident, explicit_impl, types));
+            }
+            ImplKey::CxxFunction(sig) => {
+                expanded.extend(expand_cxx_function(
+                    &sig,
+                    explicit_impl,
+                    types,
+                    first_cxx_function,
+                ));
+                first_cxx_function = false;
             }
         }
     }
@@ -1674,6 +1684,7 @@ fn expand_cxx_vector(
     let elem = key.rust;
     let name = elem.to_string();
     let resolve = types.resolve(elem);
+
     let prefix = format!("cxxbridge1$std$vector${}$", resolve.name.to_symbol());
     let link_new = format!("{}new", prefix);
     let link_size = format!("{}size", prefix);
@@ -1817,6 +1828,61 @@ fn expand_cxx_vector(
             }
         }
     }
+}
+
+fn expand_cxx_function(
+    key: &FunctionImplKey,
+    _explicit_impl: Option<&Impl>,
+    types: &Types,
+    first_cxx_function: bool,
+) -> TokenStream {
+    let link_invoke = key.link_name_invoke(types);
+
+    if let Type::CxxFunction(ty) = key.ty {
+        if let Type::Fn(sig) = &ty.inner {
+            let only_first_time = if first_cxx_function {
+                quote! {
+                    pub struct CrateFnImpls;
+                    pub type CxxFunction<F> = ::cxx::CxxFunction<CrateFnImpls, F>;
+                }
+            } else {
+                Default::default()
+            };
+
+            let ret = if let Some(Type::Ident(r)) = &sig.ret {
+                quote! { #r }
+            } else {
+                quote! { () }
+            };
+
+            let mut arg_types = quote! {};
+            let mut arg_names = quote! {};
+            let mut arg_type_names = quote! {};
+            for (id, a) in sig.args.iter().enumerate() {
+                if let Type::Ident(ident) = &a.ty {
+                    let arg_name = format_ident!("a_{id}");
+                    arg_types = quote! { #arg_types #ident, };
+                    arg_names = quote! { #arg_names #arg_name, };
+                    arg_type_names = quote! { #arg_type_names #arg_name: #ident, };
+                }
+            }
+
+            return quote_spanned! {ty.name.span() =>
+                #only_first_time
+
+                unsafe impl ::cxx::private::CxxFunctionImpl<#ret, (#arg_types)> for CrateFnImpls {
+                    fn __invoke(this: *mut ::cxx::core::ffi::c_void, (#arg_names): (#arg_types)) -> #ret {
+                        extern "C" {
+                            #[link_name = #link_invoke]
+                            fn __function_invoke(this: *mut ::cxx::core::ffi::c_void, #arg_type_names) -> #ret;
+                        }
+                        unsafe { __function_invoke(this, #arg_names) }
+                    }
+                }
+            };
+        }
+    }
+    panic!("bad type");
 }
 
 fn expand_return_type(ret: &Option<Type>) -> TokenStream {

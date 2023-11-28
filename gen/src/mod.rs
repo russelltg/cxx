@@ -163,7 +163,7 @@ pub(super) fn generate(syntax: File, opt: &Opt) -> Result<GeneratedCode> {
     cfg::strip(errors, cfg_errors, opt.cfg_evaluator.as_ref(), apis);
     errors.propagate()?;
 
-    let ref types = Types::collect(errors, apis);
+    let ref types = Types::collect(errors, &apis);
     check::precheck(errors, apis, opt);
     errors.propagate()?;
 

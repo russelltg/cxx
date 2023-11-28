@@ -8,6 +8,7 @@
 #include <stdexcept>
 #include <string>
 #include <tuple>
+#include <functional>
 
 extern "C" void cxx_test_suite_set_correct() noexcept;
 extern "C" tests::R *cxx_test_suite_get_box() noexcept;
@@ -897,6 +898,23 @@ extern "C" const char *cxx_run_test() noexcept {
   // https://github.com/dtolnay/cxx/issues/705
   (void)rust::Vec<size_t>();
   (void)rust::Vec<rust::isize>();
+
+  bool called = false;
+  std::function<void()> f = [&] {
+    called = true;
+  };
+
+  ASSERT(!called);
+  r_call_ref_function(f);
+  ASSERT(called);
+
+  int32_t pre_call = -1;
+  std::function<int32_t(int32_t)> f2 = [&](int32_t a) {
+    pre_call = a;
+    return 45;
+  };
+  ASSERT(r_call_ref_function_arg_ret(f2) == 45);
+  ASSERT(pre_call == 32);
 
   cxx_test_suite_set_correct();
   return nullptr;
