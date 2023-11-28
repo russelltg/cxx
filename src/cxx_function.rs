@@ -16,22 +16,29 @@ pub struct CxxFunction<I: ?Sized, F> {
     _fn: PhantomData<F>,
 }
 
-impl<I, Out> CxxFunction<I, fn() -> Out>
-where
-    I: CxxFunctionImpl<Out, ()>,
-{
-    /// Run the std::function
-    pub fn invoke(&mut self) -> Out {
-        <I as CxxFunctionImpl<Out, ()>>::__invoke(self as *mut _ as _, ())
-    }
+macro_rules! impl_invoke {
+    ($($name:ident : $ty:ident),*) => {
+        impl<I, Out, $($ty,)*> CxxFunction<I, fn($($name: $ty,)*) -> Out>
+        where
+            I: CxxFunctionImpl<Out, ($($ty,)*)>,
+        {
+            /// Run the std::function
+            pub fn invoke(&mut self, $($name : $ty,)*) -> Out {
+                let args = ($($name,)*);
+                <I as CxxFunctionImpl<Out, ($($ty,)*),>>::__invoke(self as *mut _ as _, args)
+            }
+        }
+    };
 }
 
-impl<I, In, Out> CxxFunction<I, fn(In) -> Out>
-where
-    I: CxxFunctionImpl<Out, (In,)>,
-{
-    /// Run the std::function
-    pub fn invoke(&mut self, a: In) -> Out {
-        <I as CxxFunctionImpl<Out, (In,)>>::__invoke(self as *mut _ as _, (a,))
-    }
-}
+impl_invoke! {}
+impl_invoke! {a_0: A0}
+impl_invoke! {a_0: A0, a_1: A1}
+impl_invoke! {a_0: A0, a_1: A1, a_2: A2}
+impl_invoke! {a_0: A0, a_1: A1, a_2: A2, a_3: A3}
+impl_invoke! {a_0: A0, a_1: A1, a_2: A2, a_3: A3, a_4: A4}
+impl_invoke! {a_0: A0, a_1: A1, a_2: A2, a_3: A3, a_4: A4, a_5: A5}
+impl_invoke! {a_0: A0, a_1: A1, a_2: A2, a_3: A3, a_4: A4, a_5: A5, a_6: A6}
+impl_invoke! {a_0: A0, a_1: A1, a_2: A2, a_3: A3, a_4: A4, a_5: A5, a_6: A6, a_7: A7}
+impl_invoke! {a_0: A0, a_1: A1, a_2: A2, a_3: A3, a_4: A4, a_5: A5, a_6: A6, a_7: A7, a_8: A8}
+impl_invoke! {a_0: A0, a_1: A1, a_2: A2, a_3: A3, a_4: A4, a_5: A5, a_6: A6, a_7: A7, a_8: A8, a_9: A9}
