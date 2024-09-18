@@ -249,10 +249,8 @@ macro_rules! impl_shared_ptr_target {
             }
             unsafe fn __from_unmanaged(value: *mut Self, new: *mut c_void) {
                 extern "C" {
-                    attr! {
-                        #[link_name = concat!("cxxbridge1$std$shared_ptr$", $segment, "$from_unmanaged")]
-                        fn __from_unmanaged(new: *mut c_void, value: *mut c_void);
-                    }
+                    #[link_name = concat!("cxxbridge1$std$shared_ptr$", $segment, "$from_unmanaged")]
+                    fn __from_unmanaged(new: *mut c_void, value: *mut c_void);
                 }
                 unsafe { __from_unmanaged(new, value as *mut c_void) }
             }
